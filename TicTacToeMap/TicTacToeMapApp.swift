@@ -205,17 +205,15 @@ struct BubbleHole: Shape {
 /// Credit card that fills the space under the game panel.
 struct MadeByCard: View {
     @Environment(\.palette) private var palette
+    @State private var textHeight: CGFloat = 56
 
     var body: some View {
         HStack(spacing: 14) {
-            // The author's memoji, peeking over a laptop from the bottom edge of the tile.
+            // The author's memoji, as tall as the three lines of text beside it.
             Image("Avatar")
                 .resizable()
                 .scaledToFit()
-                .frame(height: 40)
-                .frame(width: 44, height: 44, alignment: .bottom)
-                .background(palette.sunk)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+                .frame(height: textHeight)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("MADE BY")
@@ -228,6 +226,7 @@ struct MadeByCard: View {
                     .font(.ui(13))
                     .foregroundStyle(palette.muted)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { textHeight = $0 }
             Spacer(minLength: 0)
         }
         .padding(18)
