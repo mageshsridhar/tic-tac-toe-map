@@ -208,11 +208,14 @@ struct MadeByCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: "number.square.fill")
-                .font(.ui(26, .semibold))
-                .foregroundStyle(palette.focus)
-                .frame(width: 44, height: 44)
-                .background(palette.sunk, in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+            // The author's memoji, peeking over a laptop from the bottom edge of the tile.
+            Image("Avatar")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 40)
+                .frame(width: 44, height: 44, alignment: .bottom)
+                .background(palette.sunk)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("MADE BY")
