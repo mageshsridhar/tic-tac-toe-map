@@ -219,9 +219,24 @@ struct MadeByCard: View {
                 Text("MADE BY")
                     .font(.ui(12, .heavy)).kerning(0.7)
                     .foregroundStyle(palette.muted)
-                Text("Magesh Sridhar")
-                    .font(.ui(17, .bold))
-                    .foregroundStyle(palette.fg)
+                // Opens the author's portfolio in the browser.
+                Link(destination: URL(string: "https://mageshsridhar.github.io")!) {
+                    HStack(spacing: 4) {
+                        Text("Magesh Sridhar")
+                            .font(.ui(17, .bold))
+                            .foregroundStyle(palette.fg)
+                        Image(systemName: "arrow.up.right")
+                            .font(.ui(13, .bold))
+                            .foregroundStyle(palette.muted)
+                    }
+                    // A 44pt-tall hit area without changing the card's layout
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                    .padding(.vertical, -11)
+                }
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Magesh Sridhar's portfolio")
+                .accessibilityHint("Opens in the browser")
                 Text("Built with SwiftUI · Assisted by Claude Code")
                     .font(.ui(13))
                     .foregroundStyle(palette.muted)
@@ -233,7 +248,7 @@ struct MadeByCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.large, style: .continuous).strokeBorder(palette.line, lineWidth: 2))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }
 
