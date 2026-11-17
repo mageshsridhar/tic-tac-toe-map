@@ -86,6 +86,17 @@ struct MapView: View {
             .simultaneousGesture(MagnifyGesture()
                 .updating($pinching) { v, s, _ in s = v.magnification }
                 .onEnded { v in zoom = max(0.4, min(3, zoom * v.magnification)) })
+            // Fades the map out under the heading and Recenter, so boards and text never collide.
+            .overlay(alignment: .top) {
+                LinearGradient(stops: [
+                    .init(color: palette.surface, location: 0),
+                    .init(color: palette.surface, location: 0.6),
+                    .init(color: palette.surface.opacity(0), location: 1),
+                ], startPoint: .top, endPoint: .bottom)
+                .frame(height: 120)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
             .overlay(alignment: .topLeading) { heading }
             .overlay(alignment: .topTrailing) {
                 Button { moveCamera(animated: true) } label: {
@@ -153,14 +164,19 @@ struct MapView: View {
         let xs = options.indices.map { (CGFloat($0) - CGFloat(options.count - 1) / 2) * L.optionSpacing }
         let travel = model.travel
         let revealed = model.revealed
+        // While going back (Undo, New game, an earlier board), everything after that board fades out first.
+        let leaving = model.fadeAfter != nil
+        let kept: (Int) -> Double = { i in (model.fadeAfter.map { i > $0 } ?? false) ? 0 : 1 }
 
         return ZStack(alignment: .topLeading) {
             // Row labels (the map is laid out on a fixed grid and zooms as a whole, so its text keeps one size)
             ForEach(0..<n, id: \.self) { i in
                 rowLabel(i == 0 ? "START" : "MOVE \(i)", x: -L.pathSize / 2 - 16, y: CGFloat(i) * L.pathSpacing)
+                    .opacity(kept(i))
             }
             if !options.isEmpty {
                 rowLabel("NEXT", x: xs[0] - L.optionSize / 2 - 16, y: rowY)
+                    .opacity(leaving ? 0 : 1)
             }
 
             // The path so far
@@ -173,6 +189,7 @@ struct MapView: View {
                 .trim(from: 0, to: isNew && !revealed ? 0 : 1)
                 .stroke(palette.muted, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .animation(isNew ? .easeOut(duration: 0.32).delay(0.12) : nil, value: revealed)
+                .opacity(kept(i))
             }
 
             // Branches to the options
@@ -186,16 +203,19 @@ struct MapView: View {
                     .animation(.easeOut(duration: 0.32).delay(0.38 + 0.045 * Double(j)), value: revealed)
                     .opacity(travel != nil && !hot ? 0.15 : 1)
                     .animation(.easeOut(duration: 0.22), value: travel?.id)
+                    .opacity(leaving ? 0 : 1)
             }
 
             // Boards on the path
             ForEach(0..<n, id: \.self) { i in
                 pathNode(i, board: path[i], isLast: i == n - 1, revealed: revealed)
+                    .opacity(kept(i))
             }
 
             // Option boards
             ForEach(Array(options.enumerated()), id: \.element.id) { j, option in
                 optionNode(option, x: xs[j], y: rowY, index: j, revealed: revealed)
+                    .opacity(leaving ? 0 : 1)
             }
 
             // The traveling dot
@@ -257,21 +277,20 @@ struct MapView: View {
         let peeked = model.peekKey == option.id
         let winner = option.board.winner
         let shown = winner ?? option.value
-        return Button { model.play(option.cells[0]) } label: {
+        return Button { model.play(option) } label: {
             // The board sits exactly on the row; its labels hang below it.
             MiniBoard(board: option.board, size: L.optionSize,
                       stroke: chosen ? palette.focus : peeked ? palette.fg : palette.edge,
                       lineWidth: chosen || peeked ? 3 : 2,
                       dashed: !(chosen || peeked))
+                // Remember where this option is on screen, so the play board's copy can fly to it.
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("root")) } action: { model.optionFrames[option.id] = $0 }
                 .frame(width: 120, height: L.optionSize)
                 .overlay(alignment: .top) {
                     VStack(spacing: 4) {
                         Text(shown.label).font(.ui(13, .heavy)).foregroundStyle(palette.ink(shown))
                         Text("\(option.endings) ending\(option.endings == 1 ? "" : "s")")
                             .font(.ui(12, .semibold)).foregroundStyle(palette.muted)
-                        if option.cells.count > 1 {
-                            Text("\(option.cells.count) squares").font(.ui(12, .semibold)).foregroundStyle(palette.muted)
-                        }
                     }
                     .fixedSize()
                     .offset(y: L.optionSize + 8)

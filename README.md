@@ -28,3 +28,7 @@ The Xcode project is generated from `project.yml` with [XcodeGen](https://github
 ```bash
 xcodegen generate
 ```
+
+## Web version
+
+A browser version of the same app lives in its own repository, [tic-tac-toe-map-web](https://github.com/mageshsridhar/tic-tac-toe-map-web), and you can play it at https://mageshsridhar.github.io/tic-tac-toe-map-web/.

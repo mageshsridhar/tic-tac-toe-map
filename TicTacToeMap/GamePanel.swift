@@ -1,29 +1,72 @@
 import SwiftUI
 
-/// Left panel: whose turn it is, the board, Undo / New game, and the endings meter.
+/// The game card (whose turn it is, the board, Undo / New game) and, unless the layout
+/// places it elsewhere, the endings card below it.
 struct GamePanel: View {
-    @Environment(\.palette) private var palette
     @Bindable var model: GameModel
+    var showsEndings = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            StatusRow(model: model)
-            BoardGrid(model: model)
-            HStack(spacing: 12) {
-                PillButton(title: "Undo", systemImage: "arrow.uturn.backward", style: .plain) { model.undo() }
-                    .keyboardShortcut("z", modifiers: .command)
-                    .disabled(model.movesPlayed == 0)
-                PillButton(title: "New game", systemImage: "arrow.counterclockwise", style: .primary) { model.restart() }
-                    .keyboardShortcut("n", modifiers: .command)
+        VStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
+                StatusRow(model: model)
+                BoardGrid(model: model)
+                HStack(spacing: 12) {
+                    PillButton(title: "Undo", systemImage: "arrow.uturn.backward", style: .plain) { model.undo() }
+                        .keyboardShortcut("z", modifiers: .command)
+                        .disabled(model.movesPlayed == 0)
+                    PillButton(title: "New game", systemImage: "arrow.counterclockwise", style: .primary) { model.restart() }
+                        .keyboardShortcut("n", modifiers: .command)
+                }
             }
-            EndingsMeter(model: model)
+            .card()
+            if showsEndings {
+                EndingsCard(model: model)
+            }
         }
-        .padding(22)
         // The board and meter have a fixed grid, so very large text sizes are capped here.
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.large, style: .continuous).strokeBorder(palette.line, lineWidth: 2))
     }
+}
+
+/// The endings meter in its own card.
+struct EndingsCard: View {
+    let model: GameModel
+    /// Take the whole space the layout offers: the dots grow to fill the width,
+    /// and the rows spread out evenly over the height.
+    var fills = false
+
+    var body: some View {
+        Group {
+            if fills {
+                GeometryReader { geo in
+                    EndingsMeter(model: model, scale: EndingsMeter.scale(fitting: geo.size), spread: true)
+                        .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                }
+            } else {
+                EndingsMeter(model: model)
+            }
+        }
+        .card()
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    }
+}
+
+/// The rounded, outlined surface every panel on the left sits on.
+private struct CardStyle: ViewModifier {
+    @Environment(\.palette) private var palette
+
+    func body(content: Content) -> some View {
+        content
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.large, style: .continuous).strokeBorder(palette.line, lineWidth: 2))
+    }
+}
+
+extension View {
+    func card() -> some View { modifier(CardStyle()) }
 }
 
 private struct StatusRow: View {
@@ -93,6 +136,7 @@ private struct BoardGrid: View {
                                     PixelMark(mark: mark)
                                         .foregroundStyle(wins.contains(i) ? palette.winFg : palette.mark(mark))
                                         .padding(27)
+                                        .transition(.scale(scale: 0.6).combined(with: .opacity))
                                 } else if peeked {
                                     PixelMark(mark: turn)
                                         .foregroundStyle(palette.mark(turn).opacity(0.3))
@@ -118,6 +162,7 @@ private struct BoardGrid: View {
                 }
             }
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("root")) } action: { model.boardFrame = $0 }
         .frame(maxWidth: .infinity)
     }
 
@@ -156,6 +201,20 @@ struct PillButton: View {
 private struct EndingsMeter: View {
     @Environment(\.palette) private var palette
     let model: GameModel
+    /// Dot size relative to the standard 8pt dots.
+    var scale: CGFloat = 1
+    /// Spread the rows evenly over the height on offer instead of stacking them tightly.
+    var spread = false
+
+    private static let labelWidth: CGFloat = 118, labelGap: CGFloat = 12
+
+    /// The largest dot scale that fits `size`: 20 dots across beside the labels, and the
+    /// nine rows of dots (5 + 3 + 1) plus the heading and some room between rows down.
+    static func scale(fitting size: CGSize) -> CGFloat {
+        let byWidth = (size.width - labelWidth - labelGap) / (20 * 8 + 19 * 2)
+        let byHeight = (size.height - 20 - 3 * 20) / (9 * 10)
+        return max(1, min(byWidth, byHeight, 2.4))
+    }
 
     var body: some View {
         let board = model.current
@@ -163,7 +222,7 @@ private struct EndingsMeter: View {
         let over = board.winner != nil
         let reachable = solver.endings(from: board)
         let finalKey = over ? board.canonical : nil
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: spread ? 0 : 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(over ? "YOUR ENDING AMONG ALL 138" : "ENDINGS STILL POSSIBLE")
                     .font(.ui(12, .heavy)).kerning(0.7)
@@ -176,7 +235,9 @@ private struct EndingsMeter: View {
             ForEach(Outcome.allCases, id: \.self) { result in
                 let keys = solver.allEndings.filter { Board($0).winner == result }
                 let lit = keys.filter { reachable.contains($0) }.count
-                HStack(alignment: .top, spacing: 12) {
+                if spread { Spacer(minLength: 12) }
+                // Each label lines up with the middle of its first row of dots.
+                HStack(alignment: .firstDotRow, spacing: Self.labelGap) {
                     HStack(spacing: 7) {
                         Circle().fill(palette.color(result)).frame(width: 10, height: 10)
                         Text(result.label).font(.ui(15)).foregroundStyle(palette.muted)
@@ -187,20 +248,39 @@ private struct EndingsMeter: View {
                                 .foregroundStyle(palette.fg)
                         }
                     }
-                    .frame(width: 118, alignment: .leading)
-                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(8), spacing: 2), count: 20), alignment: .leading, spacing: 2) {
+                    .frame(width: Self.labelWidth, alignment: .leading)
+                    let dot = 8 * scale, gap = 2 * scale
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(dot), spacing: gap), count: 20), alignment: .leading, spacing: gap) {
                         ForEach(keys, id: \.self) { key in
                             let on = reachable.contains(key)
+                            let isFinal = key == finalKey
+                            // The ending you reached: a smaller dot inside a ring that stays within
+                            // its own cell (dot plus gap), so it never covers the dots beside it.
                             Circle()
                                 .fill(on ? palette.color(result) : palette.line)
                                 .opacity(on ? 1 : 0.6)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(palette.fg, lineWidth: 2).padding(-3).opacity(key == finalKey ? 1 : 0))
+                                .frame(width: isFinal ? dot * 0.62 : dot, height: isFinal ? dot * 0.62 : dot)
+                                .frame(width: dot, height: dot)
+                                .overlay {
+                                    if isFinal {
+                                        Circle().strokeBorder(palette.fg, lineWidth: 1.5 * scale)
+                                            .frame(width: dot + gap, height: dot + gap)
+                                    }
+                                }
                         }
                     }
-                    .frame(width: 198, alignment: .leading)
+                    .frame(width: 20 * dot + 19 * gap, alignment: .leading)
+                    .alignmentGuide(.firstDotRow) { _ in dot / 2 }
                 }
             }
         }
     }
+}
+
+private extension VerticalAlignment {
+    /// The middle of a legend row's label, matched to the middle of its first row of dots.
+    enum FirstDotRow: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+    static let firstDotRow = VerticalAlignment(FirstDotRow.self)
 }
